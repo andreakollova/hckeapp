@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { apiService } from '../services/api.ts';
 import { Article } from '../types.ts';
 import ArticleCard from '../components/ArticleCard.tsx';
+import { parseSlovakDate, formatSlovakDate } from '../utils/helpers.ts';
 
 const News: React.FC = () => {
   const [articles, setArticles] = useState<Article[]>([]);
@@ -11,17 +12,27 @@ const News: React.FC = () => {
   useEffect(() => {
     const fetchArticles = async () => {
       setLoading(true);
-      const data = await apiService.getArticles();
-      setArticles(Array.isArray(data) ? data : []);
+      const data = await apiService.getArticles(30); // Zvýšený limit pre lepšie radenie
+      
+      const processedArticles = (Array.isArray(data) ? data : [])
+        .map(art => {
+          const parsedDate = parseSlovakDate(art.date_text || art.date);
+          return {
+            ...art,
+            _timestamp: parsedDate ? parsedDate.getTime() : 0,
+            _formattedDate: formatSlovakDate(parsedDate)
+          };
+        })
+        .sort((a, b) => b._timestamp - a._timestamp); // Od najnovšieho
+
+      setArticles(processedArticles);
       setLoading(false);
     };
     fetchArticles();
   }, []);
 
-  const safeArticles = Array.isArray(articles) ? articles : [];
-
   return (
-    <div className="max-w-5xl mx-auto p-4 pb-20">
+    <div className="max-w-5xl mx-auto p-4 pb-20 page-transition">
       <div className="flex items-center gap-6 mb-12 mt-4">
         <h1 className="text-4xl md:text-6xl font-sports font-bold uppercase tracking-tighter">
           Aktuality
@@ -37,13 +48,13 @@ const News: React.FC = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4">
-          {safeArticles.map((article, idx) => (
+          {articles.map((article, idx) => (
             <ArticleCard key={idx} article={article} />
           ))}
         </div>
       )}
       
-      {!loading && safeArticles.length === 0 && (
+      {!loading && articles.length === 0 && (
         <div className="text-center py-20 opacity-40">
            <p className="text-xl font-sports italic">Žiadne novinky neboli nájdené.</p>
         </div>

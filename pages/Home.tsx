@@ -1,12 +1,12 @@
 
 import React, { useEffect, useState } from 'react';
 import { apiService } from '../services/api.ts';
-import { HomeData } from '../types.ts';
+import { HomeData, Match } from '../types.ts';
 import MatchCard from '../components/MatchCard.tsx';
 import ArticleCard from '../components/ArticleCard.tsx';
 import { RefreshCcw, Loader2, CalendarDays } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { getArticleImage } from '../utils/helpers.ts';
+import { getArticleImage, parseSlovakDate, formatSlovakDate } from '../utils/helpers.ts';
 
 const Home: React.FC = () => {
   const [data, setData] = useState<HomeData | null>(null);
@@ -18,7 +18,7 @@ const Home: React.FC = () => {
     setError(false);
     try {
       const homeData = await apiService.getHomeData();
-      if (homeData && (homeData.latest_articles?.length || homeData.upcoming_matches?.length)) {
+      if (homeData) {
         setData(homeData);
       } else {
         setError(true);
@@ -38,9 +38,11 @@ const Home: React.FC = () => {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[80vh] bg-dark">
-        <Loader2 size={60} className="text-primary animate-spin" />
-        <p className="font-sports uppercase tracking-[0.3em] text-white/40 text-sm italic mt-8 animate-pulse">Nalievame ľadovú plochu...</p>
-        <p className="text-[10px] text-white/20 mt-2">Prvé spustenie môže trvať do 30 sekúnd</p>
+        <div className="relative">
+          <Loader2 size={60} className="text-primary animate-spin" />
+          <div className="absolute inset-0 blur-xl bg-primary/20 rounded-full animate-pulse" />
+        </div>
+        <p className="font-sports uppercase tracking-[0.3em] text-white/40 text-sm italic mt-8 animate-pulse text-center px-4">Pripravujeme štadión...</p>
       </div>
     );
   }
@@ -52,7 +54,7 @@ const Home: React.FC = () => {
           <RefreshCcw size={40} />
         </div>
         <h2 className="text-3xl font-sports font-bold uppercase mb-2">Chyba spojenia</h2>
-        <p className="text-white/40 mb-8 max-w-xs">Nepodarilo sa načítať aktuálne dáta z klubu. Skontrolujte prosím internet alebo skúste znova.</p>
+        <p className="text-white/40 mb-8 max-w-xs">Nepodarilo sa načítať aktuálne dáta z klubu.</p>
         <button 
           onClick={fetchData}
           className="bg-primary hover:bg-secondary px-12 py-4 rounded-full font-sports font-bold uppercase tracking-[0.2em] transition-all shadow-lg active:scale-95"
@@ -64,10 +66,35 @@ const Home: React.FC = () => {
   }
 
   const upcoming_matches = Array.isArray(data.upcoming_matches) ? data.upcoming_matches : [];
-  const latest_articles = Array.isArray(data.latest_articles) ? data.latest_articles : [];
-  const nextMatch = upcoming_matches[0] || data.next_match;
-  const heroArticle = latest_articles[0] || data.latest_article;
+  const played_matches = Array.isArray(data.played_matches) ? data.played_matches : [];
   
+  // Spracovanie článkov s jednotným dátumom a radením
+  const latest_articles = (Array.isArray(data.latest_articles) ? data.latest_articles : [])
+    .map(art => {
+      const parsedDate = parseSlovakDate(art.date_text || art.date);
+      return {
+        ...art,
+        _timestamp: parsedDate ? parsedDate.getTime() : 0,
+        _formattedDate: formatSlovakDate(parsedDate)
+      };
+    })
+    .sort((a, b) => b._timestamp - a._timestamp);
+  
+  // LOGIKA PRE NAJBLIŽŠÍ ZÁPAS
+  const now = Date.now();
+  const allAvailableMatches = [...upcoming_matches, ...played_matches];
+  
+  const futureMatches = allAvailableMatches
+    .map(m => {
+      let matchDate = m.date_iso ? new Date(m.date_iso) : parseSlovakDate(m.date_text);
+      return { ...m, _timestamp: matchDate && !isNaN(matchDate.getTime()) ? matchDate.getTime() : null };
+    })
+    .filter(m => m._timestamp !== null && m._timestamp > now)
+    .sort((a, b) => (a._timestamp || 0) - (b._timestamp || 0));
+
+  const nextMatch = futureMatches[0] || data.next_match || null;
+
+  const heroArticle = latest_articles[0] || data.latest_article;
   const heroBg = heroArticle 
     ? getArticleImage(heroArticle) 
     : "https://images.unsplash.com/photo-1515703407324-5f753eed217b?q=80&w=1000&auto=format&fit=crop";
@@ -81,22 +108,22 @@ const Home: React.FC = () => {
 
   return (
     <div className="pb-24 page-transition">
-      <section className="relative w-full min-h-[75vh] flex items-center justify-center overflow-hidden">
+      <section className="relative w-full min-h-[80vh] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 z-0">
-          <img src={heroBg} alt="Hero" className="w-full h-full object-cover opacity-50 scale-105" />
-          <div className="absolute inset-0 bg-gradient-to-b from-dark/40 via-dark/70 to-dark" />
+          <img src={heroBg} alt="Hero" className="w-full h-full object-cover opacity-40 scale-105" />
+          <div className="absolute inset-0 bg-gradient-to-b from-dark/20 via-dark/60 to-dark" />
         </div>
         
         <div className="relative z-10 px-4 py-16 max-w-5xl mx-auto w-full">
            <div className="flex flex-col items-center mb-12 text-center">
               <span className="bg-primary/20 text-primary border border-primary/40 px-6 py-2 rounded-full text-[10px] font-black uppercase tracking-[0.4em] mb-6 backdrop-blur-md">Oficiálna aplikácia</span>
-              <h1 className="text-6xl md:text-[7.5rem] font-sports font-black uppercase italic tracking-tighter mb-4 leading-[0.85] text-white text-glow">
+              <h1 className="text-6xl md:text-[8rem] font-sports font-black uppercase italic tracking-tighter mb-4 leading-[0.8] text-white text-glow">
                 My sme <span className="text-primary">Košice</span>
               </h1>
            </div>
 
            {nextMatch ? (
-             <div className="animate-in fade-in slide-in-from-bottom-20 duration-1000 ease-out">
+             <div className="animate-in fade-in slide-in-from-bottom-12 duration-1000 ease-out">
                <MatchCard match={nextMatch} highlighted={true} />
              </div>
            ) : (
@@ -111,7 +138,7 @@ const Home: React.FC = () => {
       <section className="px-4 -mt-16 relative z-20 max-w-[1440px] mx-auto">
         <div className="flex items-end justify-between mb-8 px-4">
           <h2 className="text-4xl md:text-7xl font-sports font-black uppercase tracking-tighter text-white leading-none">Novinky</h2>
-          <Link to="/news" className="bg-white/10 hover:bg-primary px-8 py-3.5 rounded-2xl text-white font-sports font-black text-sm uppercase tracking-widest transition-all hover:shadow-glow">Archív správ</Link>
+          <Link to="/news" className="bg-white/10 hover:bg-primary px-8 py-3.5 rounded-2xl text-white font-sports font-black text-sm uppercase tracking-widest transition-all hover:shadow-glow">Archív</Link>
         </div>
         <div className="flex gap-6 overflow-x-auto pb-10 scrollbar-hide snap-x px-4">
           {latest_articles.slice(0, 6).map((article, idx) => (

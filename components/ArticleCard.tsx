@@ -1,18 +1,21 @@
+
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Article } from '../types.ts';
 import { ChevronRight } from 'lucide-react';
-import { getArticleImage } from '../utils/helpers.ts';
+import { getArticleImage, parseSlovakDate, formatSlovakDate } from '../utils/helpers.ts';
 
 interface ArticleCardProps {
-  article: Article;
+  article: Article & { _formattedDate?: string };
   featured?: boolean;
 }
 
 const ArticleCard: React.FC<ArticleCardProps> = ({ article, featured }) => {
   const imageUrl = getArticleImage(article);
   const articleUrl = article.url || '';
-  const displayDate = String(article.date_text || article.date || "Dnes");
+  
+  // Ak už máme predformátovaný dátum z News.tsx, použijeme ho. Inak skúsime sformátovať za behu.
+  const displayDate = article._formattedDate || formatSlovakDate(parseSlovakDate(article.date_text || article.date));
   const displayTitle = String(article.title || "Bez názvu");
 
   if (featured) {

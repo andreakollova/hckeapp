@@ -4,6 +4,7 @@ import { apiService } from '../services/api.ts';
 import { Match } from '../types.ts';
 import MatchCard from '../components/MatchCard.tsx';
 import { RefreshCcw, Search, Loader2 } from 'lucide-react';
+import { parseSlovakDate } from '../utils/helpers.ts';
 
 const Matches: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'upcoming' | 'played'>('played');
@@ -20,30 +21,26 @@ const Matches: React.FC = () => {
       const u = await apiService.getMatches('upcoming', 80);
       const p = await apiService.getMatches('played', 80);
       
-      // Zoradenie VÝSLEDKOV (Played): Najnovší zápas (napr. 54. kolo) hore
-      const sortedPlayed = [...p].sort((a, b) => {
-        const dateA = a.date_iso ? new Date(a.date_iso).getTime() : 0;
-        const dateB = b.date_iso ? new Date(b.date_iso).getTime() : 0;
-        
-        if (dateB !== dateA) return dateB - dateA;
+      const now = Date.now();
 
-        // Ak sú dátumy rovnaké, skúsime zoradiť podľa čísla kola
-        const roundA = parseInt(a.round?.replace(/\D/g, '') || '0');
-        const roundB = parseInt(b.round?.replace(/\D/g, '') || '0');
-        return roundB - roundA;
-      });
+      // Zoradenie VÝSLEDKOV (Played): Najnovšie odohrané zápasy hore
+      const sortedPlayed = [...p].map(m => {
+        const d = m.date_iso ? new Date(m.date_iso) : parseSlovakDate(m.date_text);
+        return { ...m, _ts: d ? d.getTime() : 0 };
+      }).sort((a, b) => b._ts - a._ts);
 
-      // Zoradenie KALENDÁRA (Upcoming): Najbližší zápas hore
-      const sortedUpcoming = [...u].sort((a, b) => {
-        const dateA = a.date_iso ? new Date(a.date_iso).getTime() : 9999999999999;
-        const dateB = b.date_iso ? new Date(b.date_iso).getTime() : 9999999999999;
-        return dateA - dateB;
-      });
+      // Zoradenie KALENDÁRA (Upcoming): Iba tie, ktoré sa ešte nezačali, zoradené chronologicky (najbližší prvý)
+      const sortedUpcoming = [...u, ...p]
+        .map(m => {
+          const d = m.date_iso ? new Date(m.date_iso) : parseSlovakDate(m.date_text);
+          return { ...m, _ts: d ? d.getTime() : 0 };
+        })
+        .filter(match => match._ts > now)
+        .sort((a, b) => a._ts - b._ts);
 
       setUpcoming(sortedUpcoming);
       setPlayed(sortedPlayed);
       
-      // Ak sú obe polia prázdne, nahlásime chybu len ak health check zlyhá
       if (u.length === 0 && p.length === 0) {
         const isHealthy = await apiService.getHealth();
         if (!isHealthy) setError(true);
@@ -109,12 +106,11 @@ const Matches: React.FC = () => {
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 gap-4">
           <Loader2 size={40} className="text-primary animate-spin" />
-          <span className="font-sports text-white/20 uppercase tracking-widest text-xs">Načítavam zápasy...</span>
         </div>
       ) : error ? (
         <div className="text-center py-20 bg-card/30 rounded-[3rem] border border-white/5">
           <RefreshCcw size={48} className="mx-auto text-primary/40 mb-6" />
-          <h3 className="text-2xl font-sports font-black uppercase mb-4">Nepodarilo sa načítať dáta</h3>
+          <h3 className="text-2xl font-sports font-black uppercase mb-4">Chyba dát</h3>
           <button onClick={fetchMatches} className="bg-primary px-10 py-3 rounded-full font-sports font-black uppercase shadow-glow">Skúsiť znova</button>
         </div>
       ) : (
@@ -127,7 +123,7 @@ const Matches: React.FC = () => {
             ))
           ) : (
             <div className="text-center py-24 opacity-30">
-              <p className="text-2xl font-sports font-black uppercase italic tracking-widest">Žiadne zápasy nenájdené</p>
+              <p className="text-2xl font-sports font-black uppercase italic tracking-widest">Žiadne zápasy</p>
             </div>
           )}
         </div>

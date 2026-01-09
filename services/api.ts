@@ -5,7 +5,6 @@ const BASE_URL = 'https://projekthcapp.onrender.com';
 
 async function fetchApi(path: string): Promise<any> {
   const url = `${BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
-  console.log(`[API] Fetching: ${url}`);
   try {
     const response = await fetch(url, {
       method: 'GET',
@@ -33,13 +32,13 @@ function extractItems<T>(data: any): T[] {
 export const apiService = {
   async getHomeData(): Promise<HomeData | null> {
     try {
+      // Zvyšujeme limit na 50, aby sme predišli vynechaniu najbližšieho zápasu kvôli paginácii
       const [articles, upcoming, played] = await Promise.all([
-        this.getArticles(6).catch(() => []),
-        this.getMatches('upcoming', 5).catch(() => []),
-        this.getMatches('played', 5).catch(() => [])
+        this.getArticles(10).catch(() => []),
+        this.getMatches('upcoming', 50).catch(() => []),
+        this.getMatches('played', 50).catch(() => [])
       ]);
 
-      // Ak máme aspoň niečo (články alebo zápasy), vrátime dáta
       if (articles.length === 0 && upcoming.length === 0 && played.length === 0) {
         return null;
       }
